@@ -9,7 +9,7 @@ numpy==1.25.2
 requests==2.32.5
 python-dateutil==2.9.0
 pytz==2025.2
-torch==2.8.0
+torch==2.0.0
 torchvision==0.15.1
 Pillow==10.1.0
 
