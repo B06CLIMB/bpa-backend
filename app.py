@@ -5,40 +5,67 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
+from werkzeug.security import generate_password_hash, check_password_hash
+from threading import Lock
 
-# ---------------- LOGIN / USER DATA ---------------- #
+# ---------------- FLASK APP & CORS ---------------- #
 app = Flask(__name__)
-CORS(app)
-DB_FILE = 'users.json'
+CORS(app)  # In production, restrict origins
 
+DB_FILE = 'users.json'
+db_lock = Lock()  # Prevent race conditions
+
+# ---------------- USER DATA FUNCTIONS ---------------- #
 def load_users():
     if not os.path.exists(DB_FILE):
         return {}
-    with open(DB_FILE, 'r') as f:
-        return json.load(f)
+    with db_lock:
+        with open(DB_FILE, 'r') as f:
+            return json.load(f)
 
 def save_users(users):
-    with open(DB_FILE, 'w') as f:
-        json.dump(users, f, indent=4)
+    with db_lock:
+        with open(DB_FILE, 'w') as f:
+            json.dump(users, f, indent=4)
 
+# ---------------- ROOT ROUTE ---------------- #
+@app.route('/')
+def home():
+    return jsonify({"message": "Backend is running!"})
+
+# ---------------- LOGIN / REGISTER ---------------- #
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
     name, age, password = data.get('name'), data.get('age'), data.get('password')
+
+    if not name or not password:
+        return jsonify({'message': 'Name and password required'}), 400
+
     users = load_users()
 
-    if name in users and users[name]['password'] == password:
-        return jsonify({'message': 'Login successful'}), 200
-    elif name not in users:
-        users[name] = {'age': age, 'password': password, 'data': []}
+    if name in users:
+        if check_password_hash(users[name]['password'], password):
+            return jsonify({'message': 'Login successful'}), 200
+        else:
+            return jsonify({'message': 'Invalid password'}), 401
+    else:
+        # New user registration
+        users[name] = {
+            'age': age,
+            'password': generate_password_hash(password),
+            'data': []
+        }
         save_users(users)
         return jsonify({'message': 'New user registered and logged in'}), 201
-    else:
-        return jsonify({'message': 'Invalid name or password'}), 401
 
+# ---------------- USER DATA ENDPOINTS ---------------- #
 @app.route('/data', methods=['GET'])
 def get_data():
     name = request.args.get('name')
+    if not name:
+        return jsonify({'message': 'Name required'}), 400
+
     users = load_users()
     return jsonify(users.get(name, {'message': 'User not found'})), 200
 
@@ -46,6 +73,9 @@ def get_data():
 def save_data():
     data = request.json
     name, new_record = data.get('name'), data.get('record')
+    if not name or new_record is None:
+        return jsonify({'message': 'Name and record required'}), 400
+
     users = load_users()
     if name in users:
         users[name]['data'].append(new_record)
@@ -55,11 +85,11 @@ def save_data():
         return jsonify({'message': 'User not found'}), 404
 
 # ---------------- MODEL INFERENCE ---------------- #
-# Load classes from file
+# Load classes
 with open("classes.txt", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
-# Preprocessing for ResNet
+# Image preprocessing
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -67,7 +97,7 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225]),
 ])
 
-# Load model once on CPU only
+# Load ResNet50 model
 device = torch.device("cpu")
 model = models.resnet50(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
@@ -82,7 +112,11 @@ def predict():
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
-    image = Image.open(file.stream).convert("RGB")
+    try:
+        image = Image.open(file.stream).convert("RGB")
+    except Exception:
+        return jsonify({"error": "Invalid image file"}), 400
+
     img_tensor = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
@@ -95,5 +129,8 @@ def predict():
         "confidence": float(conf.item())
     })
 
+# ---------------- RUN APP ---------------- #
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Starting server on port {port}...")
+    app.run(host="0.0.0.0", port=port, debug=False)
