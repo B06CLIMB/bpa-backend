@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json, os
 
-# --- LOGIN/DATA PART (your existing code) ---
+# ---------------- LOGIN / USER DATA ---------------- #
 app = Flask(__name__)
 CORS(app)
 DB_FILE = 'users.json'
@@ -50,7 +50,7 @@ def save_data():
     else:
         return jsonify({'message': 'User not found'}), 404
 
-# --- MODEL PART (new) ---
+# ---------------- MODEL INFERENCE ---------------- #
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
@@ -60,7 +60,7 @@ from PIL import Image
 with open("classes.txt", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
-# Define preprocessing
+# Preprocessing for ResNet
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -68,11 +68,13 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225]),
 ])
 
-# Load model once
+# Load model on CPU only
+device = torch.device("cpu")
 model = models.resnet50(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
-state_dict = torch.load("resnet50_buffalo_best.pth", map_location=torch.device("cpu"))
+state_dict = torch.load("resnet50_buffalo_best.pth", map_location=device)
 model.load_state_dict(state_dict)
+model.to(device)
 model.eval()
 
 @app.route("/predict", methods=["POST"])
@@ -82,7 +84,7 @@ def predict():
 
     file = request.files["file"]
     image = Image.open(file.stream).convert("RGB")
-    img_tensor = transform(image).unsqueeze(0)
+    img_tensor = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         outputs = model(img_tensor)
@@ -95,4 +97,4 @@ def predict():
     })
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
