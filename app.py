@@ -8,10 +8,10 @@ from torchvision import models, transforms
 import os
 
 app = Flask(__name__)
-CORS(app)  # Allow all origins or restrict to your frontend domain if needed
+CORS(app)  # Allow all origins; change to specific domain if needed
 
 # ---------------- Model Setup ---------------- #
-device = torch.device("cpu")  # or "cuda" if GPU available
+device = torch.device("cpu")  # Change to "cuda" if GPU is available
 MODEL_FILE = "resnet50_buffalo_best.pth"
 CLASSES_FILE = "classes.txt"
 
@@ -34,8 +34,19 @@ state_dict = torch.load(MODEL_FILE, map_location=device)
 model.load_state_dict(state_dict)
 model.to(device)
 model.eval()
-
 print("Model loaded and ready!")
+
+# ---------------- Login Endpoint ---------------- #
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+
+    # Simple hardcoded authentication
+    if username == "admin" and password == "1234":
+        return jsonify({"success": True, "message": "Login successful"})
+    return jsonify({"success": False, "message": "Invalid credentials"}), 401
 
 # ---------------- Prediction Endpoint ---------------- #
 @app.route("/predict", methods=["POST"])
@@ -66,6 +77,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"Starting Flask app on port {port}...")
     app.run(host="0.0.0.0", port=port)
-
-
-
