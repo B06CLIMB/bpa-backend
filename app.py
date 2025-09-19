@@ -10,7 +10,7 @@ from threading import Lock
 
 # ---------------- FLASK APP ---------------- #
 app = Flask(__name__)
-CORS(app)  # Allow all origins (for dev). Restrict in production.
+CORS(app, origins=["https://b06climb.github.io"])  # Only allow your frontend
 
 DB_FILE = 'users.json'
 db_lock = Lock()  # Prevent race conditions
@@ -83,7 +83,14 @@ def save_data():
         return jsonify({'message': 'User not found'}), 404
 
 # ---------------- MODEL ---------------- #
-with open("classes.txt", "r") as f:
+# Load classes
+CLASSES_FILE = "classes.txt"
+MODEL_FILE = "resnet50_buffalo_best.pth"
+
+if not os.path.exists(CLASSES_FILE) or not os.path.exists(MODEL_FILE):
+    raise FileNotFoundError("classes.txt or model file not found. Make sure both are in the repo.")
+
+with open(CLASSES_FILE, "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
 transform = transforms.Compose([
@@ -93,14 +100,15 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225]),
 ])
 
-device = torch.device("cpu")
+device = torch.device("cpu")  # Change to "cuda" if GPU available
 model = models.resnet50(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
-state_dict = torch.load("resnet50_buffalo_best.pth", map_location=device)
+state_dict = torch.load(MODEL_FILE, map_location=device)
 model.load_state_dict(state_dict)
 model.to(device)
 model.eval()
 
+# ---------------- PREDICTION ---------------- #
 @app.route("/predict", methods=["POST"])
 def predict():
     if "file" not in request.files:
@@ -109,21 +117,25 @@ def predict():
     file = request.files["file"]
     try:
         image = Image.open(file.stream).convert("RGB")
-    except Exception:
-        return jsonify({"error": "Invalid image file"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Invalid image file: {str(e)}"}), 400
 
-    img_tensor = transform(image).unsqueeze(0).to(device)
-    with torch.no_grad():
-        outputs = model(img_tensor)
-        probs = torch.softmax(outputs, dim=1)
-        conf, pred = torch.max(probs, 1)
-
-    return jsonify({
-        "breed": classes[pred.item()],
-        "confidence": float(conf.item())
-    })
+    try:
+        img_tensor = transform(image).unsqueeze(0).to(device)
+        with torch.no_grad():
+            outputs = model(img_tensor)
+            probs = torch.softmax(outputs, dim=1)
+            conf, pred = torch.max(probs, 1)
+        return jsonify({
+            "breed": classes[pred.item()],
+            "confidence": float(conf.item())
+        })
+    except Exception as e:
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
 
 # ---------------- RUN ---------------- #
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
+    print(f"Starting app on port {port}...")
     app.run(host="0.0.0.0", port=port)
+
