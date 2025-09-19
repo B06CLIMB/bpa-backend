@@ -98,4 +98,7 @@ def predict():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5e8f3f8 (Save local changes before pull)
