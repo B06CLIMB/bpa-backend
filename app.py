@@ -10,12 +10,12 @@ from threading import Lock
 
 # ---------------- FLASK APP ---------------- #
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Allow all origins (for dev). Restrict in production.
 
 DB_FILE = 'users.json'
 db_lock = Lock()  # Prevent race conditions
 
-# ---------------- USER DATA ---------------- #
+# ---------------- HELPER FUNCTIONS ---------------- #
 def load_users():
     if not os.path.exists(DB_FILE):
         return {}
@@ -45,7 +45,7 @@ def login():
         else:
             return jsonify({'message': 'Invalid password'}), 401
     else:
-        # New user registration
+        # Register new user
         users[name] = {
             'age': age,
             'password': generate_password_hash(password),
@@ -54,7 +54,7 @@ def login():
         save_users(users)
         return jsonify({'message': 'New user registered and logged in'}), 201
 
-# ---------------- USER DATA ENDPOINTS ---------------- #
+# ---------------- USER DATA ---------------- #
 @app.route('/data', methods=['GET'])
 def get_data():
     name = request.args.get('name')
@@ -62,7 +62,10 @@ def get_data():
         return jsonify({'message': 'Name required'}), 400
 
     users = load_users()
-    return jsonify(users.get(name, {'message': 'User not found'})), 200
+    if name in users:
+        return jsonify({'data': users[name].get('data', [])}), 200
+    else:
+        return jsonify({'data': []}), 200
 
 @app.route('/data', methods=['POST'])
 def save_data():
@@ -79,7 +82,7 @@ def save_data():
     else:
         return jsonify({'message': 'User not found'}), 404
 
-# ---------------- MODEL INFERENCE ---------------- #
+# ---------------- MODEL ---------------- #
 with open("classes.txt", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
@@ -110,7 +113,6 @@ def predict():
         return jsonify({"error": "Invalid image file"}), 400
 
     img_tensor = transform(image).unsqueeze(0).to(device)
-
     with torch.no_grad():
         outputs = model(img_tensor)
         probs = torch.softmax(outputs, dim=1)
@@ -121,8 +123,7 @@ def predict():
         "confidence": float(conf.item())
     })
 
-# ---------------- RUN APP ---------------- #
+# ---------------- RUN ---------------- #
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, debug=False)
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
