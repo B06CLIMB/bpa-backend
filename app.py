@@ -8,14 +8,14 @@ from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from threading import Lock
 
-# ---------------- FLASK APP & CORS ---------------- #
+# ---------------- FLASK APP ---------------- #
 app = Flask(__name__)
-CORS(app)  # In production, restrict origins
+CORS(app)
 
 DB_FILE = 'users.json'
 db_lock = Lock()  # Prevent race conditions
 
-# ---------------- USER DATA FUNCTIONS ---------------- #
+# ---------------- USER DATA ---------------- #
 def load_users():
     if not os.path.exists(DB_FILE):
         return {}
@@ -27,11 +27,6 @@ def save_users(users):
     with db_lock:
         with open(DB_FILE, 'w') as f:
             json.dump(users, f, indent=4)
-
-# ---------------- ROOT ROUTE ---------------- #
-@app.route('/')
-def home():
-    return jsonify({"message": "Backend is running!"})
 
 # ---------------- LOGIN / REGISTER ---------------- #
 @app.route('/login', methods=['POST'])
@@ -85,11 +80,9 @@ def save_data():
         return jsonify({'message': 'User not found'}), 404
 
 # ---------------- MODEL INFERENCE ---------------- #
-# Load classes
 with open("classes.txt", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
-# Image preprocessing
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -97,7 +90,6 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225]),
 ])
 
-# Load ResNet50 model
 device = torch.device("cpu")
 model = models.resnet50(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
@@ -131,6 +123,6 @@ def predict():
 
 # ---------------- RUN APP ---------------- #
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    print(f"Starting server on port {port}...")
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
