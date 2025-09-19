@@ -1,40 +1,30 @@
 from flask import Flask, request, jsonify
-import json
-import os
 from flask_cors import CORS
+import json, os
 
+# --- LOGIN/DATA PART (your existing code) ---
 app = Flask(__name__)
 CORS(app)
-
-# File to act as our simple database
 DB_FILE = 'users.json'
 
-# Load user data from the file
 def load_users():
     if not os.path.exists(DB_FILE):
         return {}
     with open(DB_FILE, 'r') as f:
         return json.load(f)
 
-# Save user data to the file
 def save_users(users):
     with open(DB_FILE, 'w') as f:
         json.dump(users, f, indent=4)
 
-# API Endpoint for Login
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
-    name = data.get('name')
-    age = data.get('age')
-    password = data.get('password')
-
+    name, age, password = data.get('name'), data.get('age'), data.get('password')
     users = load_users()
 
-    # Check if user exists and password is correct
     if name in users and users[name]['password'] == password:
         return jsonify({'message': 'Login successful'}), 200
-    # If user doesn't exist, create a new one
     elif name not in users:
         users[name] = {'age': age, 'password': password, 'data': []}
         save_users(users)
@@ -42,27 +32,17 @@ def login():
     else:
         return jsonify({'message': 'Invalid name or password'}), 401
 
-# API Endpoint to get a user's data
 @app.route('/data', methods=['GET'])
 def get_data():
     name = request.args.get('name')
     users = load_users()
+    return jsonify(users.get(name, {'message': 'User not found'})), 200
 
-    if name in users:
-        # Return the entire user object, including their age and data
-        return jsonify(users[name]), 200
-    else:
-        return jsonify({'message': 'User not found'}), 404
-
-# API Endpoint to save new data for a user
 @app.route('/data', methods=['POST'])
 def save_data():
     data = request.json
-    name = data.get('name')
-    new_record = data.get('record')
-
+    name, new_record = data.get('name'), data.get('record')
     users = load_users()
-
     if name in users:
         users[name]['data'].append(new_record)
         save_users(users)
@@ -70,5 +50,49 @@ def save_data():
     else:
         return jsonify({'message': 'User not found'}), 404
 
+# --- MODEL PART (new) ---
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
+
+# Load classes
+with open("classes.txt", "r") as f:
+    classes = [line.strip() for line in f.readlines()]
+
+# Define preprocessing
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225]),
+])
+
+# Load model once
+model = models.resnet50(weights=None)
+model.fc = nn.Linear(model.fc.in_features, len(classes))
+state_dict = torch.load("resnet50_buffalo_best.pth", map_location=torch.device("cpu"))
+model.load_state_dict(state_dict)
+model.eval()
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    image = Image.open(file.stream).convert("RGB")
+    img_tensor = transform(image).unsqueeze(0)
+
+    with torch.no_grad():
+        outputs = model(img_tensor)
+        probs = torch.softmax(outputs, dim=1)
+        conf, pred = torch.max(probs, 1)
+
+    return jsonify({
+        "breed": classes[pred.item()],
+        "confidence": float(conf.item())
+    })
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
