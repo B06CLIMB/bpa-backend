@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json, os
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
 
 # ---------------- LOGIN / USER DATA ---------------- #
 app = Flask(__name__)
@@ -51,12 +55,7 @@ def save_data():
         return jsonify({'message': 'User not found'}), 404
 
 # ---------------- MODEL INFERENCE ---------------- #
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
-from PIL import Image
-
-# Load classes
+# Load classes from file
 with open("classes.txt", "r") as f:
     classes = [line.strip() for line in f.readlines()]
 
@@ -68,7 +67,7 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225]),
 ])
 
-# Load model on CPU only
+# Load model once on CPU only
 device = torch.device("cpu")
 model = models.resnet50(weights=None)
 model.fc = nn.Linear(model.fc.in_features, len(classes))
@@ -98,10 +97,3 @@ def predict():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-=======
->>>>>>> 5e8f3f8 (Save local changes before pull)
-=======
->>>>>>> 72920965f95597acb0e5a11d346f10cf461dc870
