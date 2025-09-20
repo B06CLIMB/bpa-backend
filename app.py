@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
@@ -8,7 +7,7 @@ from torchvision import models, transforms
 import os
 
 app = Flask(__name__)
-CORS(app)  # Allow all origins; change to specific domain if needed
+CORS(app)
 
 # ---------------- Model Setup ---------------- #
 device = torch.device("cpu")  # Change to "cuda" if GPU is available
@@ -40,12 +39,16 @@ print("Model loaded and ready!")
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-    age = data.get("age")
+    print("Received login data:", data)  # DEBUG
+
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", "")).strip()
+    age = str(data.get("age", "")).strip()
+
+    print(f"Parsed - username: '{username}', password: '{password}', age: '{age}'")  # DEBUG
 
     # Hardcoded credentials with age check
-    if username == "admin" and password == "232" and str(age) == "27":
+    if username == "admin" and password == "232" and age == "27":
         return jsonify({"success": True, "message": "Login successful"})
     return jsonify({"success": False, "message": "Invalid credentials"}), 401
 
@@ -67,7 +70,7 @@ def predict():
 
         return jsonify({
             "breed": classes[pred.item()],
-            "confidence": float(conf.item() * 100)  # percentage
+            "confidence": float(conf.item() * 100)
         })
 
     except Exception as e:
