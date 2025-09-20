@@ -42,9 +42,10 @@ def login():
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
+    age = data.get("age")
 
-    # Simple hardcoded authentication
-    if username == "admin" and password == "1234":
+    # Hardcoded credentials with age check
+    if username == "admin" and password == "232" and str(age) == "27":
         return jsonify({"success": True, "message": "Login successful"})
     return jsonify({"success": False, "message": "Invalid credentials"}), 401
 
